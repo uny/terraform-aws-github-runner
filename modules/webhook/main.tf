@@ -11,9 +11,11 @@ resource "aws_apigatewayv2_api" "webhook" {
 }
 
 resource "aws_apigatewayv2_route" "webhook" {
-  api_id    = aws_apigatewayv2_api.webhook.id
-  route_key = "POST /${local.webhook_endpoint}"
-  target    = "integrations/${aws_apigatewayv2_integration.webhook.id}"
+  api_id             = aws_apigatewayv2_api.webhook.id
+  route_key          = "POST /${local.webhook_endpoint}"
+  target             = "integrations/${aws_apigatewayv2_integration.webhook.id}"
+  # authorization_type = "CUSTOM"
+  # authorizer_id      = aws_apigatewayv2_authorizer.webhook.id
 }
 
 resource "aws_apigatewayv2_stage" "webhook" {
@@ -54,6 +56,14 @@ resource "aws_apigatewayv2_integration" "webhook" {
   description        = "GitHub App webhook for receiving build events."
   integration_method = "POST"
   integration_uri    = aws_lambda_function.webhook.invoke_arn
+}
+
+resource "aws_apigatewayv2_authorizer" "webhook" {
+  api_id                            = aws_apigatewayv2_api.webhook.id
+  authorizer_type                   = "REQUEST"
+  authorizer_uri                    = aws_lambda_function.authorizer.invoke_arn
+  name                              = "${var.prefix}-webhook-authorizer"
+  authorizer_payload_format_version = "2.0"
 }
 
 

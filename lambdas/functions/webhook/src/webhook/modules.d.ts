@@ -3,6 +3,7 @@ declare namespace NodeJS {
     ENVIRONMENT: string;
     PARAMETER_GITHUB_APP_WEBHOOK_SECRET: string;
     REPOSITORY_ALLOW_LIST: string;
+    SOURCE_IP_ALLOW_LIST: string;
     RUNNER_LABELS: string;
   }
 }

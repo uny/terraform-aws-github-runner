@@ -1,10 +1,9 @@
 import middy from '@middy/core';
 import { logger, setContext, captureLambdaHandler, tracer } from '@terraform-aws-github-runner/aws-powertools-util';
-import { APIGatewayEvent, Context } from 'aws-lambda';
+import { APIGatewayAuthorizerResult, APIGatewayEvent, APIGatewayRequestAuthorizerEventV2, Context } from 'aws-lambda';
 
-import { handle } from './webhook';
+import { authorize, handle } from './webhook';
 import { Config } from './ConfigResolver';
-import { IncomingHttpHeaders } from 'http';
 import ValidationError from './ValidatonError';
 
 export interface Response {
@@ -12,7 +11,18 @@ export interface Response {
   body?: string;
 }
 
-middy(githubWebhook).use(captureLambdaHandler(tracer));
+export async function authorizer(
+  event: APIGatewayRequestAuthorizerEventV2,
+  context: Context,
+): Promise<APIGatewayAuthorizerResult> {
+  setContext(context, 'lambda.ts');
+  const config = await Config.load();
+
+  logger.logEventIfEnabled(event);
+  logger.debug('Loading config', { config });
+
+  return await authorize(event.headers ?? {}, event.routeArn, config);
+}
 
 export async function githubWebhook(event: APIGatewayEvent, context: Context): Promise<Response> {
   setContext(context, 'lambda.ts');
@@ -23,7 +33,7 @@ export async function githubWebhook(event: APIGatewayEvent, context: Context): P
 
   let result: Response;
   try {
-    result = await handle(headersToLowerCase(event.headers), event.body as string, config);
+    result = await handle(event.headers, event.body as string, config);
   } catch (e) {
     logger.error(`Failed to handle webhook event`, { error: e });
     if (e instanceof ValidationError) {
@@ -41,10 +51,13 @@ export async function githubWebhook(event: APIGatewayEvent, context: Context): P
   return result;
 }
 
-// ensure header keys lower case since github headers can contain capitals.
-function headersToLowerCase(headers: IncomingHttpHeaders): IncomingHttpHeaders {
-  for (const key in headers) {
-    headers[key.toLowerCase()] = headers[key];
+const addMiddleware = () => {
+  const handler = captureLambdaHandler(tracer);
+  if (!handler) {
+    return;
   }
-  return headers;
-}
+  middy(authorizer).use(handler);
+  middy(githubWebhook).use(handler);
+};
+
+addMiddleware();

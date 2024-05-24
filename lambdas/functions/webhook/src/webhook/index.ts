@@ -7,9 +7,59 @@ import { Response } from '../lambda';
 import { RunnerMatcherConfig, sendActionRequest, sendWebhookEventToWorkflowJobQueue } from '../sqs';
 import ValidationError from '../ValidatonError';
 import { Config } from '../ConfigResolver';
+import { APIGatewayAuthorizerResult, Statement } from 'aws-lambda';
 
 const supportedEvents = ['workflow_job'];
 const logger = createChildLogger('handler');
+
+export async function authorize(
+  headers: IncomingHttpHeaders,
+  routeArn: string,
+  config: Config,
+): Promise<APIGatewayAuthorizerResult> {
+  init(headers);
+
+  const eventType = headers['x-github-event'] as string;
+  if (!supportedEvents.includes(eventType)) {
+    logger.warn(`Unsupported event type: ${eventType}`);
+    return {
+      principalId: 'user',
+      policyDocument: {
+        Version: '2012-10-17',
+        Statement: [
+          {
+            Action: 'execute-api:Invoke',
+            Effect: 'Deny',
+            Resource: routeArn,
+          },
+        ],
+      },
+      context: {
+        error: `Unsupported event type: ${eventType}`,
+      },
+    };
+  }
+
+  const statement: Statement = {
+    Action: 'execute-api:Invoke',
+    Effect: 'Allow',
+    Resource: routeArn,
+  };
+  if (config.sourceIpAllowList.length > 0) {
+    statement.Condition = {
+      IpAddress: {
+        'aws:SourceIp': config.sourceIpAllowList,
+      },
+    };
+  }
+  return {
+    principalId: 'user',
+    policyDocument: {
+      Version: '2012-10-17',
+      Statement: [statement],
+    },
+  };
+}
 
 export async function handle(headers: IncomingHttpHeaders, body: string, config: Config): Promise<Response> {
   init(headers);
@@ -126,11 +176,6 @@ function init(headers: IncomingHttpHeaders) {
 
 function readEvent(headers: IncomingHttpHeaders, body: string): { event: WorkflowJobEvent; eventType: string } {
   const eventType = headers['x-github-event'] as string;
-
-  if (!supportedEvents.includes(eventType)) {
-    logger.warn(`Unsupported event type: ${eventType}`);
-    throw new ValidationError(202, `Unsupported event type: ${eventType}`);
-  }
 
   const event = JSON.parse(body) as WorkflowJobEvent;
   logger.addPersistentLogAttributes({

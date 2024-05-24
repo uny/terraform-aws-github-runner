@@ -123,6 +123,12 @@ variable "repository_white_list" {
   default     = []
 }
 
+variable "source_ip_allow_list" {
+  description = "List of github repository full names (owner/repo_name) that will be allowed to use the github app. Leave empty for no filtering."
+  type        = list(string)
+  default     = []
+}
+
 variable "kms_key_arn" {
   description = "Optional CMK Key ARN to be used for Parameter Store."
   type        = string

@@ -4,12 +4,18 @@ import { logger } from '@terraform-aws-github-runner/aws-powertools-util';
 
 export class Config {
   repositoryAllowList: Array<string>;
+  sourceIpAllowList: Array<string>;
   static matcherConfig: Array<RunnerMatcherConfig> | undefined;
   static webhookSecret: string | undefined;
   workflowJobEventSecondaryQueue: string | undefined;
 
-  constructor(repositoryAllowList: Array<string>, workflowJobEventSecondaryQueue: string | undefined) {
+  constructor(
+    repositoryAllowList: Array<string>,
+    sourceIpAllowList: Array<string>,
+    workflowJobEventSecondaryQueue: string | undefined,
+  ) {
     this.repositoryAllowList = repositoryAllowList;
+    this.sourceIpAllowList = sourceIpAllowList;
 
     this.workflowJobEventSecondaryQueue = workflowJobEventSecondaryQueue;
   }
@@ -17,6 +23,8 @@ export class Config {
   static async load(): Promise<Config> {
     const repositoryAllowListEnv = process.env.REPOSITORY_ALLOW_LIST ?? '[]';
     const repositoryAllowList = JSON.parse(repositoryAllowListEnv) as Array<string>;
+    const sourceIpAllowListEnv = process.env.SOURCE_IP_ALLOW_LIST ?? '[]';
+    const sourceIpAllowList = JSON.parse(sourceIpAllowListEnv) as Array<string>;
     // load parallel config if not cached
     if (!Config.matcherConfig) {
       const matcherConfigPath =
@@ -30,7 +38,7 @@ export class Config {
       logger.debug('Loaded queues config', { matcherConfig: Config.matcherConfig });
     }
     const workflowJobEventSecondaryQueue = process.env.SQS_WORKFLOW_JOB_QUEUE ?? undefined;
-    return new Config(repositoryAllowList, workflowJobEventSecondaryQueue);
+    return new Config(repositoryAllowList, sourceIpAllowList, workflowJobEventSecondaryQueue);
   }
 
   static reset(): void {
